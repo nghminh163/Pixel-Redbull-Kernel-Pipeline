@@ -16,16 +16,16 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      # - name: Maximize build space
-      #   uses: easimon/maximize-build-space@master
-      #   with:
-      #     root-reserve-mb: 8192    # 8GB for root memory reservation
-      #     temp-reserve-mb: 2048     # 2GB for temporary memory reservation
-      #     swap-size-mb: 8192       # 8GB for swap size
-      #     remove-dotnet: 'true'
-      #     remove-android: 'true'
-      #     remove-haskell: 'true'
-      #     remove-codeql: 'true'
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 8192    # 8GB for root memory reservation
+          temp-reserve-mb: 2048     # 2GB for temporary memory reservation
+          swap-size-mb: 8192       # 8GB for swap size
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
           
       - name: Checkout code
         uses: actions/checkout@v3
@@ -48,7 +48,7 @@ jobs:
           echo "CONFIG set to: $CONFIG"
 
           # Set RAMDISK_PATH environment variable for future steps
-          echo "RAMDISK_PATH=$GITHUB_WORKSPACE/ramdisk/$CONFIG/$BRANCH" >> $GITHUB_ENV
+          echo "RAMDISK_PATH=$GITHUB_WORKSPACE/ramdisk/$CONFIG/$ANDROID_BRANCH" >> $GITHUB_ENV
           echo "ANDROID_BRANCH=$ANDROID_BRANCH" >> $GITHUB_ENV
 
       - name: Install Repo
@@ -59,24 +59,24 @@ jobs:
           chmod a+rx ./git-repo/repo
           echo "REPO=$GITHUB_WORKSPACE/./git-repo/repo" >> $GITHUB_ENV
 
-      # - name: Install Others
-      #   run: |
-      #     # Install dependencies
-      #     sudo apt update
-      #     sudo apt install build-essential flex bison libssl-dev libelf-dev libncurses5-dev gcc-aarch64-linux-gnu make
+      - name: Install Others
+        run: |
+          # Install dependencies
+          sudo apt update
+          sudo apt install build-essential flex bison libssl-dev libelf-dev libncurses5-dev gcc-aarch64-linux-gnu make
 
-      # - name: Clone Dependencies
-      #   run: |
-      #     echo "Cloning dependencies..."
-      #     # SUSFS_BRANCH="kernel-4.19"
+      - name: Clone Dependencies
+        run: |
+          echo "Cloning dependencies..."
+          # SUSFS_BRANCH="kernel-4.19"
 
-      #     # Debug print the branches
-      #     # echo "Using branch for SUSFS: $SUSFS_BRANCH"
+          # Debug print the branches
+          # echo "Using branch for SUSFS: $SUSFS_BRANCH"
 
-      #     # Clone repositories using the branch names
-      #     # git clone https://github.com/WildPlusKernel/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
-      #     # git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
-      #     # git clone https://github.com/DNNDHH/kernel_patches.git
+          # Clone repositories using the branch names
+          # git clone https://github.com/WildPlusKernel/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
+          # git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
+          # git clone https://github.com/DNNDHH/kernel_patches.git
 
       - run: ls -l
 
@@ -112,150 +112,135 @@ jobs:
           
           # Initialize and sync kernel source
           echo "Initializing and syncing kernel source..."
-          echo $ANDROID_BRANCH
-          # $REPO init -u https://android.googlesource.com/kernel/manifest -b $ANDROID_BRANCH
+          $REPO init -u https://android.googlesource.com/kernel/manifest -b $ANDROID_BRANCH
 
-          # # Sync repo and apply patches
-          # $REPO --version
-          # $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
+          # Sync repo and apply patches
+          $REPO --version
+          $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
           
-          # cp -fv ramdisk prebuilts/boot-artifacts/ramdisks/ramdisk-aosp_arm64.img
-          # cp -fv vendor_ramdisk prebuilts/boot-artifacts/ramdisks/vendor_ramdisk-barbet.img
-          # cp -fv vendor_ramdisk prebuilts/boot-artifacts/ramdisks/vendor_ramdisk-redfin.img
-          # cp -fv vendor_ramdisk prebuilts/boot-artifacts/ramdisks/vendor_ramdisk-bramble.img
+          cp -fv ramdisk prebuilts/boot-artifacts/ramdisks/ramdisk-aosp_arm64.img
+          cp -fv vendor_ramdisk prebuilts/boot-artifacts/ramdisks/vendor_ramdisk-barbet.img
+          cp -fv vendor_ramdisk prebuilts/boot-artifacts/ramdisks/vendor_ramdisk-redfin.img
+          cp -fv vendor_ramdisk prebuilts/boot-artifacts/ramdisks/vendor_ramdisk-bramble.img
 
-      # - name: Add KernelSU
+      - name: Add KernelSU
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG/private/msm-google/"
+          
+          # COMMIT_ID="7b0944645172"
+          # if git rev-parse --quiet --verify "$COMMIT_ID^{commit}"; then
+          #     echo "✅ Found commit $COMMIT_ID, checking out..."
+          #     git checkout $COMMIT_ID
+          # else
+          #     echo "⚠️ Commit $COMMIT_ID not found, skipping checkout."
+          # fi
+          
+          echo "Adding KernelSU..."
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+
+      # - name: Apply SUSFS Patches
       #   run: |
       #     echo "Changing to configuration directory: $CONFIG..."
       #     cd "$CONFIG/private/msm-google/"
           
-      #     # COMMIT_ID="7b0944645172"
-      #     # if git rev-parse --quiet --verify "$COMMIT_ID^{commit}"; then
-      #     #     echo "✅ Found commit $COMMIT_ID, checking out..."
-      #     #     git checkout $COMMIT_ID
-      #     # else
-      #     #     echo "⚠️ Commit $COMMIT_ID not found, skipping checkout."
-      #     # fi
+      #     echo "Applying SUSFS patches..."
           
-      #     echo "Adding KernelSU..."
-      #     curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+      #     # Copy SUSFS patches
+      #     cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./KernelSU/
+      #     cp ../../../susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.19.patch ./
+      #     cp ../../../susfs4ksu/kernel_patches/fs/* ./fs/
+      #     cp ../../../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
 
-      # # - name: Apply SUSFS Patches
-      # #   run: |
-      # #     echo "Changing to configuration directory: $CONFIG..."
-      # #     cd "$CONFIG/private/msm-google/"
+      #     cd ./KernelSU
           
-      # #     echo "Applying SUSFS patches..."
+      #     # Apply SUSFS patch for KernelSU
+      #     patch -p1 --fuzz=3 < 10_enable_susfs_for_ksu.patch || true
           
-      # #     # Copy SUSFS patches
-      # #     cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./KernelSU/
-      # #     cp ../../../susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.19.patch ./
-      # #     cp ../../../susfs4ksu/kernel_patches/fs/* ./fs/
-      # #     cp ../../../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
+      #     # Change to common directory and apply SUSFS patch
+      #     cd ..
+      #     patch -p1 --fuzz=3 < 50_add_susfs_in_kernel-4.19.patch || true
 
-      # #     cd ./KernelSU
-          
-      # #     # Apply SUSFS patch for KernelSU
-      # #     patch -p1 --fuzz=3 < 10_enable_susfs_for_ksu.patch || true
-          
-      # #     # Change to common directory and apply SUSFS patch
-      # #     cd ..
-      # #     patch -p1 --fuzz=3 < 50_add_susfs_in_kernel-4.19.patch || true
+      - name: Apply KSU Hooks
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          # Remove line
+          mkdir -p "$CONFIG/private/msm-google/KernelSU"
+          cd "$CONFIG/private/msm-google/"
+          # Apply additional patch
+          cp ../../kernel_patches/ksu_hooks_4.19.patch ./
+          patch -p1 --fuzz=3 < ./ksu_hooks_4.19.patch
 
-      # - name: Apply KSU Hooks
-      #   run: |
-      #     echo "Changing to configuration directory: $CONFIG..."
-      #     # Remove line
-      #     mkdir -p "$CONFIG/private/msm-google/KernelSU"
-      #     cd "$CONFIG/private/msm-google/"
-      #     # Apply additional patch
-      #     cp ../../kernel_patches/ksu_hooks_4.19.patch ./
-      #     patch -p1 --fuzz=3 < ./ksu_hooks_4.19.patch
+      - name: Add SUSFS Configuration Settings
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG/private/msm-google/"
+          
+          echo "Adding configuration settings to redbull-gki_defconfig..."
+          
+          # Add SUSFS configuration settings
+          echo "CONFIG_KSU=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ./arch/arm64/configs/redbull-gki_defconfig
+          
+          # Add additional tmpfs config setting
+          echo "CONFIG_TMPFS_XATTR=y" >> ./arch/arm64/configs/redbull-gki_defconfig
 
-      # - name: Add SUSFS Configuration Settings
-      #   run: |
-      #     echo "Changing to configuration directory: $CONFIG..."
-      #     cd "$CONFIG/private/msm-google/"
+      - name: Run sed and perl Commands
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG/private/msm-google/"
           
-      #     echo "Adding configuration settings to redbull-gki_defconfig..."
+          echo "Running sed commands..."
           
-      #     # Add SUSFS configuration settings
-      #     echo "CONFIG_KSU=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     # echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ./arch/arm64/configs/redbull-gki_defconfig
+          # Run sed commands for modifications
+          sed -i 's/check_defconfig//' ./build.config.common
+          sed -i 's/check_defconfig//' ./build.config.redbull
+          sed -i 's/check_defconfig && //' ./build.config.redbull.no-cfi
+          # Added commit id
+          sed -i '$s|echo "\$res"|echo "\-g7b0944645172-@sn00py_z0r0-$GITHUB_SHA_SHORT"|' ./scripts/setlocalversion
+          sed -i 's/-stable//' ./scripts/setlocalversion
           
-      #     # Add additional tmpfs config setting
-      #     echo "CONFIG_TMPFS_XATTR=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-
-      # - name: Run sed and perl Commands
-      #   run: |
-      #     echo "Changing to configuration directory: $CONFIG..."
-      #     cd "$CONFIG/private/msm-google/"
-          
-      #     echo "Running sed commands..."
-          
-      #     # Run sed commands for modifications
-      #     sed -i 's/check_defconfig//' ./build.config.common
-      #     sed -i 's/check_defconfig//' ./build.config.redbull
-      #     sed -i 's/check_defconfig && //' ./build.config.redbull.no-cfi
-      #     # Added commit id
-      #     sed -i '$s|echo "\$res"|echo "\-g7b0944645172-@sn00py_z0r0-$GITHUB_SHA_SHORT"|' ./scripts/setlocalversion
-      #     sed -i 's/-stable//' ./scripts/setlocalversion
-          
-      #     # Run perl command to modify UTS_VERSION
-      #     perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Sat Apr 20 04:20:00 UTC 2025"}' ./scripts/mkcompile_h
+          # Run perl command to modify UTS_VERSION
+          perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Sat Apr 20 04:20:00 UTC 2025"}' ./scripts/mkcompile_h
 
 
-      # - name: Build the Kernel
-      #   run: |
-      #     echo "Changing to configuration directory: $CONFIG..."
-      #     cd "$CONFIG"
+      - name: Build the Kernel
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG"
           
-      #     echo "Building the kernel..."
-      #     BUILD_AOSP_KERNEL=1 ./build_redbull-gki.sh
+          echo "Building the kernel..."
+          BUILD_AOSP_KERNEL=1 ./build_redbull-gki.sh
           
-      # - name: Create zip file for result
-      #   run: |
-      #     echo "Changing to configuration directory: $CONFIG..."
-      #     cd "$CONFIG"
-      #     mkdir fastboot_files
-      #     cp -r ./out/android-msm-pixel-4.19/dist/boot.img fastboot_files/
-      #     cp -r ./out/android-msm-pixel-4.19/dist/vendor_boot.img fastboot_files/
-      #     cp -r ./out/android-msm-pixel-4.19/dist/dtbo.img fastboot_files/
-      #     echo "Creating zip file for fastboot files..."
-      #     cd fastboot_files/
-      #     zip -r "fastboot.zip" .*
+      - name: Create zip file for result
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG"
+          mkdir fastboot_files
+          cp -r ./out/android-msm-pixel-4.19/dist/boot.img fastboot_files/
+          cp -r ./out/android-msm-pixel-4.19/dist/vendor_boot.img fastboot_files/
+          cp -r ./out/android-msm-pixel-4.19/dist/dtbo.img fastboot_files/
+          echo "Creating zip file for fastboot files..."
+          cd fastboot_files/
+          zip -r "fastboot.zip" .*
         
-      # - name: Upload result
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: fastboot.zip
-      #     path: "redfin/fastboot_files/fastboot.zip"
-
-
-
-
-
-
-
-
-
-
-
-
-
-            
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: fastboot.zip
+          path: "redfin/fastboot_files/fastboot.zip"
