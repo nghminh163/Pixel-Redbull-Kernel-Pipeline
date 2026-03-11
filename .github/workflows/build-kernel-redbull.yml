@@ -36,6 +36,7 @@ on:
         options:
           - 'kernelSU'
           - 'kernelSU-next'
+          - 'SukiSU'
 
 
 jobs:
@@ -173,9 +174,19 @@ jobs:
           echo "Adding KernelSU..."
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
 
+      - name: Add SukiSU Ultra
+        if: ${{ github.event.inputs.kernel_root == 'SukiSU' }}
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG/private/msm-google/"
+          
+          echo "Adding SukiSU Ultra..."
+          
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s nongki
+
 
       - name: Apply SUSFS Patches
-        if: ${{ github.event.inputs.susfs_enable == 'true' }}
+        if: ${{ github.event.inputs.susfs_enable == 'true' && (github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU') }}
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/private/msm-google/"
@@ -203,6 +214,7 @@ jobs:
           patch -p1 --fuzz=3 < 50_add_susfs_in_kernel-4.19.patch || true
 
       - name: Apply KSU Hooks
+        if: ${{ github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU' }}
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/private/msm-google/"
@@ -210,7 +222,8 @@ jobs:
           cp ../../../kernel_patches/ksu_hooks_4.19.patch ./
           patch -p1 --fuzz=3 < ./ksu_hooks_4.19.patch
 
-      - name: Add Configuration Settings
+      - name: Add Configuration Settings KSU
+        if: ${{ github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU' }}
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/private/msm-google/"
@@ -224,7 +237,7 @@ jobs:
           echo "CONFIG_TMPFS_XATTR=y" >> ./arch/arm64/configs/redbull-gki_defconfig
 
       - name: Apply SUSFS Configuration Settings
-        if: ${{ github.event.inputs.susfs_enable == 'true' }}
+        if: ${{ github.event.inputs.susfs_enable == 'true' && (github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU') }}
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/private/msm-google/"
@@ -247,6 +260,21 @@ jobs:
           echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
           echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ./arch/arm64/configs/redbull-gki_defconfig
           
+      - name: Add Configuration Settings KSU
+        if: ${{ github.event.inputs.kernel_root == 'SukiSU' }}
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG/private/msm-google/"
+          
+          echo "Adding configuration settings to redbull-gki_defconfig..."
+          
+          # Enable SukiSU configuration
+          echo "CONFIG_KSU=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          echo "CONFIG_KSU_MANUAL_HOOK=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          echo "CONFIG_KPM=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          echo "CONFIG_KALLSYMS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+          echo "CONFIG_KALLSYMS_ALL=y" >> ./arch/arm64/configs/redbull-gki_defconfig
+
       - name: Run sed and perl Commands
         run: |
           GITHUB_SHA_SHORT=$(echo ${{ github.sha }} | cut -c 1-7)
