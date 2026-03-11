@@ -50,9 +50,11 @@ jobs:
           echo "Android version: ${{ github.event.inputs.android_version }}"
           echo "SUSFS enable: ${{ github.event.inputs.susfs_enable }}"
           echo "Kernel root: ${{ github.event.inputs.kernel_root }}"
-          if [ "${{ github.event.inputs.susfs_enable }}" = "false" ] && [ "${{ github.event.inputs.kernel_root }}" = "SukiSU" ]; then
-            echo "Error: SUSFS cannot be disabled when using SukiSU kernel root. Please enable SUSFS"
+          if [ "${{ github.event.inputs.susfs_enable }}" = "false" ] && \
+            [ "${{ github.event.inputs.kernel_root }}" = "SukiSU" ]; then
+            echo "Error: SUSFS cannot be disabled when using SukiSU"
             exit 1
+          fi
 
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
