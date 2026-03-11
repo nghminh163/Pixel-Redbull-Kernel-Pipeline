@@ -1,0 +1,20 @@
+name: Build Pixel5 Android14 KernelSU SUSFS
+
+permissions:
+  contents: read  # 不需要写入 release 或打 tag
+  actions: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_redbull:
+        description: 'Build Pixel5 Android14 KernelSU SUSFS'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  build-kernel-redbull:
+    uses: ./.github/workflows/build-kernel-redbull.yml
+    secrets: inherit
+    if: ${{ inputs.build_redbull }}

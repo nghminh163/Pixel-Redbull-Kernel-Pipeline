@@ -101,7 +101,7 @@ jobs:
           
           # Initialize and sync kernel source
           echo "Initializing and syncing kernel source..."
-          $REPO init -u https://android.googlesource.com/kernel/manifest -b android-msm-redbull-4.19-android14
+          $REPO init -u https://android.googlesource.com/kernel/manifest -b android-msm-redbull-4.19-android14-qpr3 --repo-rev=v2.54 --depth=1
 
           # Sync repo and apply patches
           $REPO --version
