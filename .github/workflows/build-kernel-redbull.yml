@@ -216,7 +216,6 @@ jobs:
           # Run perl command to modify UTS_VERSION
           perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Sat Apr 20 04:20:00 UTC 2025"}' ./scripts/mkcompile_h
 
-
       - name: Build the Kernel
         run: |
           echo "Changing to configuration directory: $CONFIG..."
@@ -235,7 +234,7 @@ jobs:
           cp -r ./out/android-msm-pixel-4.19/dist/dtbo.img fastboot_files/
           echo "Creating zip file for fastboot files..."
           cd fastboot_files/
-          zip -r "fastboot.zip" .*
+          zip -r "fastboot.zip" .
         
       - name: Upload result
         uses: actions/upload-artifact@v4
