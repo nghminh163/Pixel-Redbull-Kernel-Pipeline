@@ -44,6 +44,16 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+      - name: Display build
+        run: |
+          echo "Device name: ${{ github.event.inputs.device }}"
+          echo "Android version: ${{ github.event.inputs.android_version }}"
+          echo "SUSFS enable: ${{ github.event.inputs.susfs_enable }}"
+          echo "Kernel root: ${{ github.event.inputs.kernel_root }}"
+          if [ "${{ github.event.inputs.susfs_enable }}" = "false" ] && [ "${{ github.event.inputs.kernel_root }}" = "SukiSU" ]; then
+            echo "Error: SUSFS cannot be disabled when using SukiSU kernel root. Please enable SUSFS"
+            exit 1
+
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
         with:
@@ -54,16 +64,6 @@ jobs:
           remove-android: 'true'
           remove-haskell: 'true'
           remove-codeql: 'true'
-
-      - name: Display build
-        run: |
-          echo "Device name: ${{ github.event.inputs.device }}"
-          echo "Android version: ${{ github.event.inputs.android_version }}"
-          echo "SUSFS enable: ${{ github.event.inputs.susfs_enable }}"
-          echo "Kernel root: ${{ github.event.inputs.kernel_root }}"
-          if [ "${{ github.event.inputs.susfs_enable }}" = "false" ] && [ "${{ github.event.inputs.kernel_root }}" = "SukiSU" ]; then
-            echo "Error: SUSFS cannot be disabled when using SukiSU kernel root. Please enable SUSFS"
-            exit 1
 
       - name: Checkout code
         uses: actions/checkout@v3
