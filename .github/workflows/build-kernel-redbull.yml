@@ -223,8 +223,13 @@ jobs:
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/private/msm-google/"
           # Apply additional patch
-          cp ../../../kernel_patches/ksu_hooks_4.19.patch ./
-          patch -p1 --fuzz=3 < ./ksu_hooks_4.19.patch
+          if [ "$KERNEL_ROOT" = "kernelSU" ]; then
+            cp ../../../kernel_patches/ksu_hooks_4.19.patch ./
+            patch -p1 --fuzz=3 < ./ksu_hooks_4.19.patch
+          elif [ "$KERNEL_ROOT" = "kernelSU-next" ]; then
+            cp ../../../kernel_patches/ksun_hooks_4.19.patch ./
+            patch -p1 --fuzz=3 < ./ksun_hooks_4.19.patch
+          fi 
 
       - name: Add Configuration Settings KSU
         if: ${{ github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU' }}
