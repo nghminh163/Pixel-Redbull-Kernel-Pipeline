@@ -204,11 +204,12 @@ jobs:
           if [ "$KERNEL_ROOT" = "kernelSU" ]; then
             cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./KernelSU/
             cd KernelSU/
+            patch -p1 --fuzz=3 < 10_enable_susfs_for_ksu.patch || true
           elif [ "$KERNEL_ROOT" = "kernelSU-next" ]; then
             cp ../../../kernel_patches/susfs_v1.5.5_ksun_v1.1.1_hooks.patch ./KernelSU-Next/
-            cd KernelSU-Next/ 
+            cd KernelSU-Next/
+            patch -p1 --fuzz=3 < susfs_v1.5.5_ksun_v1.1.1_hooks.patch || true
           fi
-          patch -p1 --fuzz=3 < 10_enable_susfs_for_ksu.patch || true
           cd ..
           cp ../../../susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.19.patch ./
           cp ../../../susfs4ksu/kernel_patches/fs/* ./fs/
