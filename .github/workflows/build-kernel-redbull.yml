@@ -10,6 +10,7 @@ on:
         default: 'redfin'
         options:
           - redfin
+          - bramble
 
       android_version:
         type: choice
@@ -18,6 +19,7 @@ on:
         default: 'android-msm-redbull-4.19-android14'
         options:
           - android-msm-redbull-4.19-android14
+          - android-msm-redbull-4.19-android13-qpr3
 
       susfs_enable:
         type: choice
