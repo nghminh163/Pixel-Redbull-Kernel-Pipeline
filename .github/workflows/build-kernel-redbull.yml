@@ -1,401 +1,141 @@
 name: Kernel build for redbull device
 
+# PHASE 1 (main mới): CHỈ build kernel redbull (redfin/bramble) KHÔNG patch,
+# để chứng minh kernel custom được và ra boot.img/vendor_boot.img/dtbo.img.
+# KSU / SUSFS / modules sẽ được mod dần ở các phase sau.
+# Pipeline KSU/SUSFS đầy đủ trước đây nằm ở nhánh `main-legacy`.
+#
+# Theo đúng flow cũ: repo sync -> chèn ramdisk gốc -> build_redbull-gki.sh -> đóng gói.
+
 on:
   workflow_dispatch:
     inputs:
       device:
         type: choice
-        description: 'Select device'
+        description: 'Thiết bị'
         required: true
         default: 'redfin'
         options:
           - redfin
           - bramble
-
       android_version:
         type: choice
-        description: 'Select Android version'
+        description: 'Branch manifest (phải có ramdisk tương ứng trong repo)'
         required: true
         default: 'android-msm-redbull-4.19-android14'
         options:
           - android-msm-redbull-4.19-android12
-          - android-msm-redbull-4.19-android14
           - android-msm-redbull-4.19-android13-qpr3
-
-      susfs_enable:
-        type: choice
-        description: 'Enable SUSFS'
-        required: true
-        default: 'true'
-        options:
-          - 'true'
-          - 'false'
-
-      kernel_root:
-        type: choice
-        description: 'Kernel root'
-        required: true
-        default: 'kernelSU'
-        options:
-          - 'kernelSU'
-          - 'kernelSU-next'
-          # - 'SukiSU'
+          - android-msm-redbull-4.19-android14
 
 jobs:
-  build-kernel-4-19-redbull:
+  build:
     runs-on: ubuntu-22.04
-
     steps:
       - name: Display build
         run: |
-          echo "Device name: ${{ github.event.inputs.device }}"
-          echo "Android version: ${{ github.event.inputs.android_version }}"
-          echo "SUSFS enable: ${{ github.event.inputs.susfs_enable }}"
-          echo "Kernel root: ${{ github.event.inputs.kernel_root }}"
-          if [ "${{ github.event.inputs.susfs_enable }}" = "false" ] && \
-            [ "${{ github.event.inputs.kernel_root }}" = "SukiSU" ]; then
-            echo "Error: SUSFS cannot be disabled when using SukiSU"
-            exit 1
-          fi
+          echo "Device: ${{ github.event.inputs.device }}"
+          echo "Android/branch: ${{ github.event.inputs.android_version }}"
 
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 8192    # 8GB for root memory reservation
-          temp-reserve-mb: 2048     # 2GB for temporary memory reservation
-          swap-size-mb: 8192       # 8GB for swap size
+          root-reserve-mb: 8192
+          temp-reserve-mb: 2048
+          swap-size-mb: 8192
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
           remove-codeql: 'true'
 
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Get build space
-        run: |
-          free -h
-          df -h
-      
       - name: Set environment
         run: |
-          # Set CONFIG dynamically based on matrix values
           CONFIG=${{ github.event.inputs.device }}
           ANDROID_BRANCH=${{ github.event.inputs.android_version }}
-          
-          # Set CONFIG as an environment variable for future steps
           echo "CONFIG=$CONFIG" >> $GITHUB_ENV
-          
-          echo "CONFIG set to: $CONFIG"
-
-          # Set RAMDISK_PATH environment variable for future steps
-          echo "RAMDISK_PATH=$GITHUB_WORKSPACE/ramdisk/$CONFIG/$ANDROID_BRANCH" >> $GITHUB_ENV
           echo "ANDROID_BRANCH=$ANDROID_BRANCH" >> $GITHUB_ENV
-          KERNEL_ROOT=${{ github.event.inputs.kernel_root }}
-          echo "KERNEL_ROOT=$KERNEL_ROOT" >> $GITHUB_ENV
+          echo "RAMDISK_PATH=$GITHUB_WORKSPACE/ramdisk/$CONFIG/$ANDROID_BRANCH" >> $GITHUB_ENV
 
       - name: Install Repo
         run: |
-          # Install dependencies
           mkdir -p ./git-repo
           curl https://storage.googleapis.com/git-repo-downloads/repo > ./git-repo/repo
           chmod a+rx ./git-repo/repo
           echo "REPO=$GITHUB_WORKSPACE/./git-repo/repo" >> $GITHUB_ENV
 
-      - name: Install Others
+      - name: Install deps
         run: |
-          # Install dependencies
           sudo apt update
-          sudo apt install build-essential flex bison libssl-dev libelf-dev libncurses5-dev gcc-aarch64-linux-gnu make dwarves
+          sudo apt install -y build-essential flex bison libssl-dev libelf-dev \
+            libncurses5-dev gcc-aarch64-linux-gnu make dwarves zip curl
 
-      - name: Clone SUSFS
-        if: ${{ github.event.inputs.susfs_enable == 'true' && (github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU') }}
+      - name: Git identity
         run: |
-          echo "Cloning SUSFS..."
-          SUSFS_BRANCH="kernel-4.19"
-          # Debug print the branches
-          echo "Using branch for SUSFS: $SUSFS_BRANCH"
-          # Clone repositories using the branch names
-          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
+          git config --global user.name "ci"
+          git config --global user.email "ci@example.com"
+          git config --global color.ui false
 
-      - run: ls -l
-
-      - name: 🔍 Locate ramdisk
-        id: locate_ramdisk
+      - name: 🔍 Locate ramdisk (fail nếu thiếu)
         run: |
-          echo "📁 Current working directory: $(pwd)"
-          echo "📦 Searching for ramdisk ..."
-          
-          # Find in $RAMDISK_PATH
-          echo "🔍 Searching in: $RAMDISK_PATH"
-          
-          FOUND=$(find "$RAMDISK_PATH" -type f -name "ramdisk" | head -n 1)
-    
-          if [ -z "$FOUND" ]; then
-            echo "❌ The `ramdisk` file was not found, and the build was terminated. This is an important file. Without integrating it into the build, the device won't boot. Haha."
+          echo "Tìm ramdisk trong: $RAMDISK_PATH"
+          if [ ! -f "$RAMDISK_PATH/ramdisk" ] || [ ! -f "$RAMDISK_PATH/vendor_ramdisk" ]; then
+            echo "::error::Thiếu ramdisk/vendor_ramdisk tại $RAMDISK_PATH"
+            echo "::error::Cặp device + android_version này chưa có ramdisk trong repo."
             exit 1
-          else
-            echo "✅ The `ramdisk` file was found: $FOUND"
           fi
+          echo "OK"; ls -l "$RAMDISK_PATH"
 
-      - name: Initialize and Sync Kernel Source
+      - name: Initialize & Sync Kernel Source
         run: |
-
-          echo "Create a configuration directory:$CONFIG"
+          set -e
           mkdir -p "$CONFIG"
-
-          echo "Copy ramdisk files：$RAMDISK_PATH to $CONFIG/"
           cp -fv "$RAMDISK_PATH/ramdisk" "$CONFIG/"
           cp -fv "$RAMDISK_PATH/vendor_ramdisk" "$CONFIG/"
-          
           cd "$CONFIG"
-          
-          # Initialize and sync kernel source
-          echo "Initializing and syncing kernel source..."
-          $REPO init -u https://android.googlesource.com/kernel/manifest -b $ANDROID_BRANCH
-
-          # Sync repo and apply patches
+          echo "repo init -b $ANDROID_BRANCH"
+          $REPO init --depth=1 -u https://android.googlesource.com/kernel/manifest -b $ANDROID_BRANCH
           $REPO --version
           $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
-          
+          # chèn ramdisk gốc vào prebuilts để build_redbull-gki dùng
           cp -fv ramdisk prebuilts/boot-artifacts/ramdisks/ramdisk-aosp_arm64.img
           cp -fv vendor_ramdisk prebuilts/boot-artifacts/ramdisks/vendor_ramdisk-barbet.img
           cp -fv vendor_ramdisk prebuilts/boot-artifacts/ramdisks/vendor_ramdisk-redfin.img
           cp -fv vendor_ramdisk prebuilts/boot-artifacts/ramdisks/vendor_ramdisk-bramble.img
 
-      - name: Add KernelSU
-        if: ${{ github.event.inputs.kernel_root == 'kernelSU' }}
-        run: |
-          echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG/private/msm-google/"
-          
-          echo "Adding KernelSU..."
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s v0.9.5
-
-      - name: Add KernelSU-Next
-        if: ${{ github.event.inputs.kernel_root == 'kernelSU-Next' }}
-        run: |
-          echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG/private/msm-google/"
-          
-          echo "Adding KernelSU_Next..."
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s v1.1.1
-
-      # - name: Add SukiSU Ultra
-      #   if: ${{ github.event.inputs.kernel_root == 'SukiSU' }}
-      #   run: |
-      #     echo "Changing to configuration directory: $CONFIG..."
-      #     cd "$CONFIG/private/msm-google/"
-          
-      #     echo "Adding SukiSU Ultra..."
-          
-      #     curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
-
-
-      # Must run BEFORE the SUSFS kernel patch: 50_add_susfs_in_kernel-4.19.patch
-      # modifies fs/notify/fdinfo.c and calls inotify_mark_user_mask(), a helper
-      # that only exists on android13/14 4.19 upstream. On android12 4.19 we must
-      # backport it first, otherwise the SUSFS fdinfo.c hunk has no matching
-      # context and the build breaks.
-      - name: Apply inotify mask patch (Android 12 + KernelSU-Next prerequisite)
-        if: ${{ github.event.inputs.susfs_enable == 'true' && github.event.inputs.kernel_root == 'kernelSU-next' && github.event.inputs.android_version == 'android-msm-redbull-4.19-android12' }}
-        run: |
-          echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG/private/msm-google/"
-
-          echo "Applying inotify mask flags patch (prerequisite for SUSFS on Android 12)..."
-          cp ../../../kernel_patches/inotify-show-inotify-mask-flags-in-proc-fdinfo.patch ./
-          patch -p1 --fuzz=3 < ./inotify-show-inotify-mask-flags-in-proc-fdinfo.patch
-
-      - name: Apply SUSFS Patches
-        if: ${{ github.event.inputs.susfs_enable == 'true' && (github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU') }}
-        run: |
-          echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG/private/msm-google/"
-
-          echo "Applying SUSFS patches..."
-          
-          # Copy SUSFS patches
-          # Check env $KERNEL_ROOT
-          echo "KERNEL_ROOT is: $KERNEL_ROOT"
-          # Apply SUSFS patch for KernelSU
-          if [ "$KERNEL_ROOT" = "kernelSU" ]; then
-            cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./KernelSU/
-            cd KernelSU/
-            patch -p1 --fuzz=3 < 10_enable_susfs_for_ksu.patch || true
-          elif [ "$KERNEL_ROOT" = "kernelSU-next" ]; then
-            cp ../../../kernel_patches/susfs_v1.5.5_ksun_v1.1.1_hooks.patch ./KernelSU-Next/
-            cd KernelSU-Next/
-            patch -p1 --fuzz=3 < susfs_v1.5.5_ksun_v1.1.1_hooks.patch || true
-          fi
-          cd ..
-          cp ../../../susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.19.patch ./
-          cp ../../../susfs4ksu/kernel_patches/fs/* ./fs/
-          cp ../../../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
-          
-          # apply SUSFS patch
-          patch -p1 --fuzz=3 < 50_add_susfs_in_kernel-4.19.patch || true
-
-      - name: Apply KSU Hooks
-        if: ${{ github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU' }}
-        run: |
-          echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG/private/msm-google/"
-          # Apply additional patch
-          if [ "$KERNEL_ROOT" = "kernelSU" ]; then
-            cp ../../../kernel_patches/ksu_hooks_4.19.patch ./
-            patch -p1 --fuzz=3 < ./ksu_hooks_4.19.patch
-          elif [ "$KERNEL_ROOT" = "kernelSU-next" ]; then
-            cp ../../../kernel_patches/ksun_hooks_4.19.patch ./
-            patch -p1 --fuzz=3 < ./ksun_hooks_4.19.patch
-          fi
-
-      - name: Add Configuration Settings KSU
-        if: ${{ github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU' }}
-        run: |
-          echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG/private/msm-google/"
-          
-          echo "Adding configuration settings to redbull-gki_defconfig..."
-          
-          # Enable KSU configuration
-          echo "CONFIG_KSU=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-
-          # Add additional tmpfs config setting
-          echo "CONFIG_TMPFS_XATTR=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-
-      - name: Apply SUSFS Configuration Settings
-        if: ${{ github.event.inputs.susfs_enable == 'true' && (github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU') }}
-        run: |
-          echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG/private/msm-google/"
-          echo "Adding SUSFS configuration settings to redbull-gki_defconfig..."
-          # Add SUSFS configuration settings
-          echo "CONFIG_KSU_SUSFS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ./arch/arm64/configs/redbull-gki_defconfig
-      
-      - name: Add Configuration Patch
-        run: |
-          echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG/private/msm-google/"
-          
-          echo "Adding configuration settings to redbull-gki_defconfig..."
-          
-          # Enable tracepoints configuration
-          echo "CONFIG_TRACEPOINTS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_HAVE_SYSCALL_TRACEPOINTS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-
-          # Enable eBPF (core + JIT + program attach to tracepoints/kprobes/uprobes)
-          echo "CONFIG_BPF=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_BPF_SYSCALL=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_BPF_JIT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_BPF_JIT_ALWAYS_ON=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_BPF_EVENTS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_HAVE_EBPF_JIT=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-
-          # Tracing infrastructure eBPF programs attach to
-          echo "CONFIG_PERF_EVENTS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_FTRACE=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_FTRACE_SYSCALLS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_DYNAMIC_FTRACE=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KPROBES=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_KPROBE_EVENTS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_UPROBES=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-          echo "CONFIG_UPROBE_EVENTS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-
-          # NOTE: BTF (CONFIG_DEBUG_INFO_BTF) is intentionally NOT enabled here.
-          # In-kernel BTF generation is fragile on this 4.19 GKI tree and can
-          # break the build (see libbpf#423). BTF for CO-RE will instead be
-          # produced post-build with pahole from vmlinux as a separate step.
-
-      - name: Debug - inspect base defconfig (KPROBES override check)
+      - name: Fix build config (bỏ check_defconfig)
         run: |
           cd "$CONFIG/private/msm-google/"
-          echo "=== All KPROBES/UPROBES/BPF lines in redbull-gki_defconfig (in file order) ==="
-          grep -nE "KPROBES|UPROBES|CONFIG_BPF|FTRACE_SYSCALLS" ./arch/arm64/configs/redbull-gki_defconfig || echo "(none found)"
-          echo ""
-          echo "NOTE: the appended '=y' lines are at the bottom; later lines win over"
-          echo "an earlier '# CONFIG_KPROBES is not set'. Final truth is the .config below."
+          sed -i 's/check_defconfig//' ./build.config.common || true
+          sed -i 's/check_defconfig//' ./build.config.redbull || true
+          sed -i 's/check_defconfig && //' ./build.config.redbull.no-cfi || true
 
-      # - name: Add Configuration Settings KSU
-      #   if: ${{ github.event.inputs.kernel_root == 'SukiSU' }}
-      #   run: |
-      #     echo "Changing to configuration directory: $CONFIG..."
-      #     cd "$CONFIG/private/msm-google/"
-          
-      #     echo "Adding configuration settings to redbull-gki_defconfig..."
-          
-      #     # Enable SukiSU configuration
-      #     echo "CONFIG_KSU=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     echo "CONFIG_KSU_MANUAL_HOOK=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     echo "CONFIG_KPM=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     echo "CONFIG_KALLSYMS=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-      #     echo "CONFIG_KALLSYMS_ALL=y" >> ./arch/arm64/configs/redbull-gki_defconfig
-
-      - name: Run sed and perl Commands
+      - name: Build kernel (không patch)
         run: |
-          GITHUB_SHA_SHORT=$(echo ${{ github.sha }} | cut -c 1-7)
-          echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG/private/msm-google/"
-          
-          echo "Running sed commands..."
-          
-          # Run sed commands for modifications
-          sed -i 's/check_defconfig//' ./build.config.common
-          sed -i 's/check_defconfig//' ./build.config.redbull
-          sed -i 's/check_defconfig && //' ./build.config.redbull.no-cfi
-          # Added commit id
-          sed -i '$s|echo "\$res"|echo "\-g7b0944645172-@sn00py_z0r0-$GITHUB_SHA_SHORT"|' ./scripts/setlocalversion
-          sed -i 's/-stable//' ./scripts/setlocalversion
-          
-          # Run perl command to modify UTS_VERSION
-          perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Sat Apr 20 04:20:00 UTC 2025"}' ./scripts/mkcompile_h
-
-      - name: Build the Kernel
-        run: |
-          echo "Changing to configuration directory: $CONFIG..."
+          set -e
           cd "$CONFIG"
-          
-          echo "Building the kernel..."
+          echo "BUILD_AOSP_KERNEL=1 ./build_redbull-gki.sh"
           BUILD_AOSP_KERNEL=1 ./build_redbull-gki.sh
+          echo "== dist =="
+          ls -l ./out/android-msm-pixel-4.19/dist/ || find out -maxdepth 3 -name '*.img'
 
-      - name: Verify final .config (KPROBES/UPROBES/BPF actually enabled)
+      - name: Đóng gói fastboot.zip
         run: |
+          set -e
           cd "$CONFIG"
-          CFG=$(find out -name ".config" -path "*msm-google*" | head -n 1)
-          [ -z "$CFG" ] && CFG=$(find out -name ".config" | head -n 1)
-          echo "Using final config: $CFG"
-          echo "=== Effective KPROBES/UPROBES/BPF/FTRACE_SYSCALLS in final .config ==="
-          grep -nE "KPROBES|UPROBES|CONFIG_BPF|FTRACE_SYSCALLS" "$CFG" || echo "(none found)"
-          
-      - name: Create zip file for result
-        run: |
-          echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG"
-          mkdir fastboot_files
-          cp -r ./out/android-msm-pixel-4.19/dist/boot.img fastboot_files/
-          cp -r ./out/android-msm-pixel-4.19/dist/vendor_boot.img fastboot_files/
-          cp -r ./out/android-msm-pixel-4.19/dist/dtbo.img fastboot_files/
-          echo "Creating zip file for fastboot files..."
+          mkdir -p fastboot_files
+          cp -f ./out/android-msm-pixel-4.19/dist/boot.img fastboot_files/
+          cp -f ./out/android-msm-pixel-4.19/dist/vendor_boot.img fastboot_files/
+          cp -f ./out/android-msm-pixel-4.19/dist/dtbo.img fastboot_files/
           cd fastboot_files/
-          zip -r "fastboot.zip" .
-        
+          zip -r fastboot.zip .
+          ls -l
+
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
-          name: fastboot.zip
+          name: fastboot-${{ github.event.inputs.device }}-${{ github.event.inputs.android_version }}
           path: ${{ env.CONFIG }}/fastboot_files/fastboot.zip
+          if-no-files-found: error
