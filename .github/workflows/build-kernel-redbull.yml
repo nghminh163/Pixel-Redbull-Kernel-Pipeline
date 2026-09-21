@@ -132,30 +132,34 @@ jobs:
         run: |
           set -e
           cd "$CONFIG/private/msm-google"
-          DEF=arch/arm64/configs/redbull-gki_defconfig
           REF="${{ github.event.inputs.ksu_ref }}"
           echo "==> setup.sh KernelSU-Next ref=$REF (mode=${{ github.event.inputs.ksu }})"
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/${REF}/kernel/setup.sh" | bash -s "$REF"
           [ -e drivers/kernelsu ] || { echo "::error::setup.sh không tạo drivers/kernelsu"; exit 1; }
-          add(){ local k="${1%%=*}"; sed -i "/^# ${k} is not set$/d;/^${k}=/d" "$DEF"; echo "$1" >> "$DEF"; }
+
           case "${{ github.event.inputs.ksu }}" in
             v3|legacy)
-              echo "== kprobes-based (KHÔNG vá source) =="
-              add CONFIG_KPROBES=y
-              add CONFIG_EXT4_FS=y
-              add CONFIG_KSU=y
-              ;;
+              echo "== kprobes-based (KHÔNG vá source); redbull 4.19 có syscall_fn_t =="
+              CFG='-e KPROBES -e KRETPROBES -e EXT4_FS -e KSU' ;;
             v1)
-              echo "== manual hook (vá fs/*.c) — dùng ksun_hooks_4.19.patch từ main-legacy =="
+              echo "== manual hook (vá fs/*.c) — ksun_hooks_4.19.patch từ main-legacy =="
               curl -LSs "https://raw.githubusercontent.com/nghminh163/Pixel-Redbull-Kernel-Pipeline/main-legacy/kernel_patches/ksun_hooks_4.19.patch" -o ksun_hooks_4.19.patch
               patch -p1 --fuzz=3 < ./ksun_hooks_4.19.patch
-              add CONFIG_KSU=y
-              add CONFIG_KSU_MANUAL_HOOK=y
-              add CONFIG_TMPFS_XATTR=y
-              ;;
+              CFG='-e KSU -e KSU_MANUAL_HOOK -e TMPFS_XATTR' ;;
           esac
-          echo "== CONFIG KSU/KPROBES trong defconfig =="
-          grep -nE "CONFIG_KSU|CONFIG_KPROBES=|CONFIG_EXT4_FS=" "$DEF" || true
+
+          # Ép config vào OUT/.config SAU khi defconfig sinh ra (append vào POST_DEFCONFIG_CMDS
+          # của build.config.redbull.vintf) — vì append thẳng redbull-gki_defconfig bị GKI bỏ qua.
+          cat >> build.config.redbull.vintf <<EOF
+
+          function ksu_config_enable() {
+            \${KERNEL_DIR}/scripts/config --file \${OUT_DIR}/.config $CFG
+            (cd \${OUT_DIR} && make O=\${OUT_DIR} CLANG_TRIPLE=\${CLANG_TRIPLE} CROSS_COMPILE=\${CROSS_COMPILE} "\${TOOL_ARGS[@]}" \${MAKE_ARGS} olddefconfig)
+          }
+          POST_DEFCONFIG_CMDS="\${POST_DEFCONFIG_CMDS} && ksu_config_enable"
+          EOF
+          echo "== đã inject ksu_config_enable ($CFG) vào build.config.redbull.vintf =="
+          tail -8 build.config.redbull.vintf
 
       - name: Build kernel (không patch)
         run: |
