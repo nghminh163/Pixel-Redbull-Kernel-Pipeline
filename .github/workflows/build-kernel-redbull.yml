@@ -138,9 +138,12 @@ jobs:
           [ -e drivers/kernelsu ] || { echo "::error::setup.sh không tạo drivers/kernelsu"; exit 1; }
 
           case "${{ github.event.inputs.ksu }}" in
-            v3|legacy)
-              echo "== kprobes-based (KHÔNG vá source); redbull 4.19 có syscall_fn_t =="
+            v3)
+              echo "== v3 kprobes-based (KHÔNG vá source) =="
               CFG='-e KPROBES -e KRETPROBES -e EXT4_FS -e KSU' ;;
+            legacy)
+              echo "== legacy kprobes+tracepoint (KHÔNG vá source): ép KSU_KPROBES_HOOK, tắt MANUAL =="
+              CFG='-e KPROBES -e KRETPROBES -e EXT4_FS -e KSU -e KSU_KPROBES_HOOK -d KSU_MANUAL_HOOK' ;;
             v1)
               echo "== manual hook (vá fs/*.c) — ksun_hooks_4.19.patch từ main-legacy =="
               curl -LSs "https://raw.githubusercontent.com/nghminh163/Pixel-Redbull-Kernel-Pipeline/main-legacy/kernel_patches/ksun_hooks_4.19.patch" -o ksun_hooks_4.19.patch
@@ -165,8 +168,12 @@ jobs:
         run: |
           set -e
           cd "$CONFIG"
-          echo "BUILD_AOSP_KERNEL=1 ./build_redbull-gki.sh"
-          BUILD_AOSP_KERNEL=1 ./build_redbull-gki.sh
+          # SKIP_MRPROPER=1: bỏ 'make mrproper' đầu (fresh sync không cần clean) — tránh
+          # legacy Kbuild bắn '$(error) No hooks' khi clean parse lúc chưa có .config.
+          SKIP=""
+          if [ "${{ github.event.inputs.ksu }}" != "none" ]; then SKIP="SKIP_MRPROPER=1"; fi
+          echo "env $SKIP BUILD_AOSP_KERNEL=1 ./build_redbull-gki.sh"
+          env $SKIP BUILD_AOSP_KERNEL=1 ./build_redbull-gki.sh
           echo "== dist =="
           ls -l ./out/android-msm-pixel-4.19/dist/ || find out -maxdepth 3 -name '*.img'
 
