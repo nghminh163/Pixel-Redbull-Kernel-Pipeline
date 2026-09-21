@@ -27,6 +27,21 @@ on:
           - android-msm-redbull-4.19-android12
           - android-msm-redbull-4.19-android13-qpr3
           - android-msm-redbull-4.19-android14
+      ksu:
+        type: choice
+        description: 'KernelSU-Next: none | v3 (kprobes) | legacy | v1 (manual hook)'
+        required: true
+        default: 'none'
+        options:
+          - 'none'
+          - 'v3'
+          - 'legacy'
+          - 'v1'
+      ksu_ref:
+        type: string
+        description: 'Tag/commit KSU-Next (v3→v3.3.0, legacy→v3.2.0-legacy, v1→v1.1.1)'
+        required: false
+        default: 'v3.3.0'
 
 jobs:
   build:
@@ -112,6 +127,36 @@ jobs:
           sed -i 's/check_defconfig//' ./build.config.redbull || true
           sed -i 's/check_defconfig && //' ./build.config.redbull.no-cfi || true
 
+      - name: Patch KernelSU-Next
+        if: ${{ github.event.inputs.ksu != 'none' }}
+        run: |
+          set -e
+          cd "$CONFIG/private/msm-google"
+          DEF=arch/arm64/configs/redbull-gki_defconfig
+          REF="${{ github.event.inputs.ksu_ref }}"
+          echo "==> setup.sh KernelSU-Next ref=$REF (mode=${{ github.event.inputs.ksu }})"
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/${REF}/kernel/setup.sh" | bash -s "$REF"
+          [ -e drivers/kernelsu ] || { echo "::error::setup.sh không tạo drivers/kernelsu"; exit 1; }
+          add(){ local k="${1%%=*}"; sed -i "/^# ${k} is not set$/d;/^${k}=/d" "$DEF"; echo "$1" >> "$DEF"; }
+          case "${{ github.event.inputs.ksu }}" in
+            v3|legacy)
+              echo "== kprobes-based (KHÔNG vá source) =="
+              add CONFIG_KPROBES=y
+              add CONFIG_EXT4_FS=y
+              add CONFIG_KSU=y
+              ;;
+            v1)
+              echo "== manual hook (vá fs/*.c) — dùng ksun_hooks_4.19.patch từ main-legacy =="
+              curl -LSs "https://raw.githubusercontent.com/nghminh163/Pixel-Redbull-Kernel-Pipeline/main-legacy/kernel_patches/ksun_hooks_4.19.patch" -o ksun_hooks_4.19.patch
+              patch -p1 --fuzz=3 < ./ksun_hooks_4.19.patch
+              add CONFIG_KSU=y
+              add CONFIG_KSU_MANUAL_HOOK=y
+              add CONFIG_TMPFS_XATTR=y
+              ;;
+          esac
+          echo "== CONFIG KSU/KPROBES trong defconfig =="
+          grep -nE "CONFIG_KSU|CONFIG_KPROBES=|CONFIG_EXT4_FS=" "$DEF" || true
+
       - name: Build kernel (không patch)
         run: |
           set -e
@@ -136,6 +181,6 @@ jobs:
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
-          name: fastboot-${{ github.event.inputs.device }}-${{ github.event.inputs.android_version }}
+          name: fastboot-${{ github.event.inputs.device }}-${{ github.event.inputs.android_version }}-ksu-${{ github.event.inputs.ksu }}
           path: ${{ env.CONFIG }}/fastboot_files/fastboot.zip
           if-no-files-found: error
