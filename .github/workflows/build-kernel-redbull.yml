@@ -36,6 +36,7 @@ on:
           - 'none'
           - 'v3'
           - 'legacy'
+          - 'legacy-kprobes'
           - 'v1'
       ksu_ref:
         type: string
@@ -146,6 +147,10 @@ jobs:
               # (kprobes hook bị khuyến cáo không dùng cho kernel < 5.10). Cần ref >= v3.4.0-legacy.
               echo "== legacy syscall-table hook (KHÔNG vá source, không cần kprobes) =="
               CFG='-e EXT4_FS -e KSU -e KSU_SYSCALL_TABLE_HOOK -d KSU_KPROBES_HOOK -d KSU_MANUAL_HOOK' ;;
+            legacy-kprobes)
+              # config legacy cũ (kprobes+tracepoint) — cho các ref < v3.4.0-legacy chưa có syscall-table
+              echo "== legacy kprobes+tracepoint (KHÔNG vá source): ép KSU_KPROBES_HOOK, tắt MANUAL =="
+              CFG='-e KPROBES -e KRETPROBES -e EXT4_FS -e KSU -e KSU_KPROBES_HOOK -d KSU_MANUAL_HOOK' ;;
             v1)
               echo "== manual hook (vá fs/*.c) — ksun_hooks_4.19.patch từ main-legacy =="
               curl -LSs "https://raw.githubusercontent.com/nghminh163/Pixel-Redbull-Kernel-Pipeline/main-legacy/kernel_patches/ksun_hooks_4.19.patch" -o ksun_hooks_4.19.patch
