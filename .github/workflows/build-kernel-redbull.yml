@@ -145,8 +145,11 @@ jobs:
             legacy)
               # KSU_SYSCALL_TABLE_HOOK: patch thẳng sys_call_table, dành cho non-GKI >= 4.17
               # (kprobes hook bị khuyến cáo không dùng cho kernel < 5.10). Cần ref >= v3.4.0-legacy.
+              # KALLSYMS_ALL bắt buộc: resolver tìm sys_call_table (data symbol) qua kallsyms,
+              # không có fallback — thiếu là 'sth: sys_call_table not found' và manager báo
+              # 'Unsupported | Not integrated'. DEBUG_KERNEL là depends của KALLSYMS_ALL trên 4.19.
               echo "== legacy syscall-table hook (KHÔNG vá source, không cần kprobes) =="
-              CFG='-e EXT4_FS -e KSU -e KSU_SYSCALL_TABLE_HOOK -d KSU_KPROBES_HOOK -d KSU_MANUAL_HOOK' ;;
+              CFG='-e EXT4_FS -e KSU -e KSU_SYSCALL_TABLE_HOOK -d KSU_KPROBES_HOOK -d KSU_MANUAL_HOOK -e DEBUG_KERNEL -e KALLSYMS -e KALLSYMS_ALL' ;;
             legacy-kprobes)
               # config legacy cũ (kprobes+tracepoint) — cho các ref < v3.4.0-legacy chưa có syscall-table
               echo "== legacy kprobes+tracepoint (KHÔNG vá source): ép KSU_KPROBES_HOOK, tắt MANUAL =="
