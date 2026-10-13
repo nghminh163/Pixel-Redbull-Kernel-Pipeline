@@ -182,6 +182,12 @@ jobs:
           # legacy Kbuild bắn '$(error) No hooks' khi clean parse lúc chưa có .config.
           SKIP=""
           if [ "${{ github.event.inputs.ksu }}" != "none" ]; then SKIP="SKIP_MRPROPER=1"; fi
+          # Ghi đè KBUILD_BUILD_TIMESTAMP = thời điểm build thật (mặc định AOSP ghim
+          # = commit date của source nên uname -a luôn hiện ngày cũ, không phân biệt được
+          # bản build đã flash). _setup_env.sh chỉ set SOURCE_DATE_EPOCH khi biến còn rỗng,
+          # nên export sẵn ở đây là override được. KHÔNG đụng uname -r / vermagic → module vẫn load.
+          export SOURCE_DATE_EPOCH=$(date +%s)
+          echo "== SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH -> $(date -d @$SOURCE_DATE_EPOCH) =="
           echo "env $SKIP BUILD_AOSP_KERNEL=1 ./build_redbull-gki.sh"
           env $SKIP BUILD_AOSP_KERNEL=1 ./build_redbull-gki.sh
           echo "== dist =="
