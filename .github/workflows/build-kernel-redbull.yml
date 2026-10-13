@@ -148,8 +148,12 @@ jobs:
               # KALLSYMS_ALL bắt buộc: resolver tìm sys_call_table (data symbol) qua kallsyms,
               # không có fallback — thiếu là 'sth: sys_call_table not found' và manager báo
               # 'Unsupported | Not integrated'. DEBUG_KERNEL là depends của KALLSYMS_ALL trên 4.19.
+              # STRICT_KERNEL_RWX + RODATA_FULL: mặc định arm64 đánh dấu sys_call_table read-only,
+              # khiến hook ghi-đè bị fault ('sth: patch syscall N failed', 0/N hooked). Tắt 2 cái này
+              # để bảng syscall writable → hook patch thành công. (Log runtime đã xác nhận resolver
+              # tìm thấy bảng nhờ KALLSYMS_ALL, chỉ nghẽn ở bước ghi.)
               echo "== legacy syscall-table hook (KHÔNG vá source, không cần kprobes) =="
-              CFG='-e EXT4_FS -e KSU -e KSU_SYSCALL_TABLE_HOOK -d KSU_KPROBES_HOOK -d KSU_MANUAL_HOOK -e DEBUG_KERNEL -e KALLSYMS -e KALLSYMS_ALL' ;;
+              CFG='-e EXT4_FS -e KSU -e KSU_SYSCALL_TABLE_HOOK -d KSU_KPROBES_HOOK -d KSU_MANUAL_HOOK -e DEBUG_KERNEL -e KALLSYMS -e KALLSYMS_ALL -d STRICT_KERNEL_RWX -d RODATA_FULL_DEFAULT_ENABLED' ;;
             legacy-kprobes)
               # config legacy cũ (kprobes+tracepoint) — cho các ref < v3.4.0-legacy chưa có syscall-table
               echo "== legacy kprobes+tracepoint (KHÔNG vá source): ép KSU_KPROBES_HOOK, tắt MANUAL =="
