@@ -29,7 +29,7 @@ on:
           - android-msm-redbull-4.19-android14
       ksu:
         type: choice
-        description: 'KernelSU-Next: none | v3 (kprobes) | legacy | v1 (manual hook)'
+        description: 'KernelSU-Next: none | v3 (kprobes) | legacy (syscall-table) | v1 (manual hook)'
         required: true
         default: 'none'
         options:
@@ -39,9 +39,9 @@ on:
           - 'v1'
       ksu_ref:
         type: string
-        description: 'Tag/commit KSU-Next (v3→v3.3.0, legacy→v3.2.0-legacy, v1→v1.1.1)'
+        description: 'Tag/commit KSU-Next (v3→v3.4.0, legacy→v3.4.0-legacy, v1→v1.1.1)'
         required: false
-        default: 'v3.3.0'
+        default: 'v3.4.0'
 
 jobs:
   build:
@@ -142,8 +142,10 @@ jobs:
               echo "== v3 kprobes-based (KHÔNG vá source) =="
               CFG='-e KPROBES -e KRETPROBES -e EXT4_FS -e KSU' ;;
             legacy)
-              echo "== legacy kprobes+tracepoint (KHÔNG vá source): ép KSU_KPROBES_HOOK, tắt MANUAL =="
-              CFG='-e KPROBES -e KRETPROBES -e EXT4_FS -e KSU -e KSU_KPROBES_HOOK -d KSU_MANUAL_HOOK' ;;
+              # KSU_SYSCALL_TABLE_HOOK: patch thẳng sys_call_table, dành cho non-GKI >= 4.17
+              # (kprobes hook bị khuyến cáo không dùng cho kernel < 5.10). Cần ref >= v3.4.0-legacy.
+              echo "== legacy syscall-table hook (KHÔNG vá source, không cần kprobes) =="
+              CFG='-e EXT4_FS -e KSU -e KSU_SYSCALL_TABLE_HOOK -d KSU_KPROBES_HOOK -d KSU_MANUAL_HOOK' ;;
             v1)
               echo "== manual hook (vá fs/*.c) — ksun_hooks_4.19.patch từ main-legacy =="
               curl -LSs "https://raw.githubusercontent.com/nghminh163/Pixel-Redbull-Kernel-Pipeline/main-legacy/kernel_patches/ksun_hooks_4.19.patch" -o ksun_hooks_4.19.patch
