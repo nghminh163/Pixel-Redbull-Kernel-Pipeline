@@ -109,7 +109,7 @@ jobs:
           sudo apt install build-essential flex bison libssl-dev libelf-dev libncurses5-dev gcc-aarch64-linux-gnu make dwarves
 
       - name: Clone SUSFS
-        if: ${{ github.event.inputs.susfs_enable == 'true' && (github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU') }}
+        if: ${{ github.event.inputs.susfs_enable == 'true' && (github.event.inputs.kernel_root == 'kernelSU-next' || github.event.inputs.kernel_root == 'kernelSU') }}
         run: |
           echo "Cloning SUSFS..."
           SUSFS_BRANCH="kernel-4.19"
@@ -173,13 +173,13 @@ jobs:
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s v0.9.5
 
       - name: Add KernelSU-Next
-        if: ${{ github.event.inputs.kernel_root == 'kernelSU-Next' }}
+        if: ${{ github.event.inputs.kernel_root == 'kernelSU-next' }}
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/private/msm-google/"
           
           echo "Adding KernelSU_Next..."
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s v1.1.1
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/v1.1.1/kernel/setup.sh" | bash -s v1.1.1
 
       # - name: Add SukiSU Ultra
       #   if: ${{ github.event.inputs.kernel_root == 'SukiSU' }}
@@ -208,7 +208,7 @@ jobs:
           patch -p1 --fuzz=3 < ./inotify-show-inotify-mask-flags-in-proc-fdinfo.patch
 
       - name: Apply SUSFS Patches
-        if: ${{ github.event.inputs.susfs_enable == 'true' && (github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU') }}
+        if: ${{ github.event.inputs.susfs_enable == 'true' && (github.event.inputs.kernel_root == 'kernelSU-next' || github.event.inputs.kernel_root == 'kernelSU') }}
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/private/msm-google/"
@@ -237,7 +237,7 @@ jobs:
           patch -p1 --fuzz=3 < 50_add_susfs_in_kernel-4.19.patch || true
 
       - name: Apply KSU Hooks
-        if: ${{ github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU' }}
+        if: ${{ github.event.inputs.kernel_root == 'kernelSU-next' || github.event.inputs.kernel_root == 'kernelSU' }}
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/private/msm-google/"
@@ -251,7 +251,7 @@ jobs:
           fi
 
       - name: Add Configuration Settings KSU
-        if: ${{ github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU' }}
+        if: ${{ github.event.inputs.kernel_root == 'kernelSU-next' || github.event.inputs.kernel_root == 'kernelSU' }}
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/private/msm-google/"
@@ -265,7 +265,7 @@ jobs:
           echo "CONFIG_TMPFS_XATTR=y" >> ./arch/arm64/configs/redbull-gki_defconfig
 
       - name: Apply SUSFS Configuration Settings
-        if: ${{ github.event.inputs.susfs_enable == 'true' && (github.event.inputs.kernel_root == 'kernelSU-Next' || github.event.inputs.kernel_root == 'kernelSU') }}
+        if: ${{ github.event.inputs.susfs_enable == 'true' && (github.event.inputs.kernel_root == 'kernelSU-next' || github.event.inputs.kernel_root == 'kernelSU') }}
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/private/msm-google/"
